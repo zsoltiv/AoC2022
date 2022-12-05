@@ -55,8 +55,12 @@ void fill_stacks(Stack **stacks, int linecount, char **data, char *indicesline)
 
 void move_stack(Stack *from, Stack *to, int amount)
 {
-    for(int move = amount - 1; move >= 0; move--)
-        add_to_stack(to, pop_from_stack(from));
+    char *moved = malloc(amount);
+    for(int i = 0; i < amount; i++)
+        moved[amount - 1 - i] = pop_from_stack(from);
+    for(int i = 0; i < amount; i++)
+        add_to_stack(to, moved[i]);
+
 }
 
 void dump_stack(Stack *s)
