@@ -4,19 +4,14 @@
 
 #define SIZE 99
 
-typedef struct Tree {
-    int height;
-    bool isvisible;
-} Tree;
-
-Tree forest[SIZE][SIZE];
+int forest[SIZE][SIZE];
 
 bool visible_from_left(int j, int k)
 {
     if(k == 0)
         return true;
     for(int i = 0; i < k; i++)
-        if(forest[j][i].height >= forest[j][k].height)
+        if(forest[j][i] >= forest[j][k])
             return false;
     return true;
 }
@@ -26,7 +21,7 @@ bool visible_from_right(int j, int k)
     if(k == SIZE - 1)
         return true;
     for(int i = SIZE - 1; i > k; i--)
-        if(forest[j][i].height >= forest[j][k].height)
+        if(forest[j][i] >= forest[j][k])
             return false;
     return true;
 }
@@ -36,7 +31,7 @@ bool visible_from_above(int j, int k)
     if(j == 0)
         return true;
     for(int i = 0; i < j; i++)
-        if(forest[i][k].height >= forest[j][k].height)
+        if(forest[i][k] >= forest[j][k])
             return false;
     return true;
 }
@@ -46,7 +41,7 @@ bool visible_from_below(int j, int k)
     if(j == SIZE - 1)
         return true;
     for(int i = SIZE - 1; i > j; i--)
-        if(forest[i][k].height >= forest[j][k].height)
+        if(forest[i][k] >= forest[j][k])
             return false;
     return true;
 }
@@ -58,8 +53,7 @@ int main(void)
     int row = 0;
     while(fgets(buf, BUFSIZ, fp)) {
         for(int col = 0; col < SIZE; col++) {
-            forest[row][col].height = buf[col] - '0';
-            forest[row][col].isvisible = false;
+            forest[row][col] = buf[col] - '0';
         }
         row++;
     }
