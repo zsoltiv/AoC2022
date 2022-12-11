@@ -1,115 +1,128 @@
 #include <stdio.h>
-#include <stdlib.h>
+#include <limits.h>
 #include <string.h>
-#include <stdbool.h>
+#include <stdlib.h>
 
-#define MAXDIRSIZE 100000
+#define TOTALSPACE 70000000
+#define UPDATESIZE 30000000
 
-typedef struct FileSystemNode {
-    struct FileSystemNode *parent;
+typedef struct Node {
+    struct Node *parent;
     char *name;
-    int ncontents;
-    struct FileSystemNode **contents;
+    int nchildren;
+    struct Node **children;
     unsigned long size;
-    bool isdir;
-} FileSystemNode;
+} Node;
 
-void print_node(const FileSystemNode *restrict node)
+unsigned long dirsizesum = 0;
+unsigned long mustbefreed = 0;
+unsigned long smallesttofree = ULONG_MAX;
+
+void append_child(Node *parent, Node *child)
 {
-    printf("{\n");
-    printf("\tparent: %p\n\tname: %s\n\tncontents: %d\n\tcontents: %p\n\tsize: %lu\n",
-           node->parent,
-           node->name,
-           node->ncontents,
-           node->contents,
-           node->size);
-    printf("}\n");
+    if(!parent || !child)
+        return;
+
+    parent->nchildren++;
+    parent->children = realloc(parent->children,
+                               sizeof(Node *) * parent->nchildren);
+    parent->children[parent->nchildren - 1] = child;
+    child->parent = parent;
 }
 
-
-FileSystemNode *new_node(FileSystemNode *parent,
-                         char *name,
-                         size_t size,
-                         bool isdir)
+Node *new_node(Node *parent, char *name, size_t size)
 {
-    FileSystemNode *node = malloc(sizeof(FileSystemNode));
-    if(parent) {
-        parent->ncontents++;
-        parent->contents = realloc(parent->contents,
-                                   sizeof(FileSystemNode *) * parent->ncontents);
-        parent->contents[parent->ncontents - 1] = node;
-    }
-    node->parent = parent;
+    Node *node = malloc(sizeof(Node));
 
-    node->name = name ? strdup(name) : NULL;
+    node->name = strdup(name);
     node->size = size;
-    node->ncontents = 0;
-    node->contents = NULL;
-    node->isdir = isdir;
-
-    if(!node->parent) {
-        fprintf(stderr, "WARN: %s has no parent\n", node->name);
-    }
+    append_child(parent, node);
+    node->nchildren = 0;
+    node->children = NULL;
 
     return node;
 }
 
-void cd(FileSystemNode **cwd, char *dir)
+Node *cd(Node *cwd, char *name)
 {
-    size_t len = strlen(dir);
-    if(!strncmp(dir, "..", strlen(dir))) {
-        *cwd = (*cwd)->parent;
-    } else {
-        for(int i = 0; i < (*cwd)->ncontents; i++)
-            if(strncmp(dir, (*cwd)->contents[i]->name, len)) {
-                *cwd = (*cwd)->contents[i];
-                break;
-            }
+    if(!strncmp("..", name, strlen(".."))) {
+        return cwd->parent;
     }
+    for(int i = 0; i < cwd->nchildren; i++)
+        if(!strncmp(name, cwd->children[i]->name, strlen(name)))
+            return cwd->children[i];
+    return new_node(cwd, name, 0);
+}
+
+void dump_node(Node *node)
+{
+    printf("{\n");
+    printf("\tname: %s\n", node->name);
+    printf("\tsize: %lu\n", node->size);
+    printf("}\n");
+}
+
+void print_branch(Node *root)
+{
+    dump_node(root);
+    for(int i = 0; i < root->nchildren; i++)
+        print_branch(root->children[i]);
+}
+
+unsigned long dirsize(Node *dir)
+{
+    unsigned long size = 0;
+    for(int i = 0; i < dir->nchildren; i++) {
+        if(!dir->children[i]->size)
+            size += dirsize(dir->children[i]);
+        size += dir->children[i]->size;
+    }
+
+    if(size <= 100000)
+        dirsizesum += size;
+    else if(size >= UPDATESIZE && size < smallesttofree)
+        smallesttofree = size;
+    return size;
 }
 
 int main(void)
 {
     FILE *fp = fopen("input.txt", "r");
+    char buf[BUFSIZ] = {0};
+    char delim[] = " ";
 
-    char line[BUFSIZ] = {0};
-    const char delims[] = " \n";
-    FileSystemNode *cwd = new_node(NULL, NULL, 0, true);
-    int ndirs = 0;
-    while(fgets(line, BUFSIZ - 1, fp)) {
-        if(!strncmp("$ ls", line, strlen("$ ls")))
-            continue;
-        if(!strncmp("$ cd", line, strlen("$ cd"))) {
-            char *token = strtok(line, delims);
-            puts(token);
-            token = strtok(NULL, delims);
-            puts(token);
-            token = strtok(NULL, delims);
-            puts(token);
-            if(strncmp(token, "/", strlen(token))) { // ignore the first line
-                cd(&cwd, token);
+    Node *root = new_node(NULL, "/", 0);
+    Node *cwd = root;
+
+    while(fgets(buf, BUFSIZ - 1, fp)) {
+        if(!strncmp("$", buf, strlen("$"))) {
+            char *tok = strtok(buf, delim);
+            tok = strtok(NULL, delim);
+            if(!strncmp(tok, "cd", strlen(tok))) {
+                tok = strtok(NULL, delim);
+                if(strncmp("/", tok, strlen("/"))) {
+                    cwd = cd(cwd, tok);
+                }
             }
-        } else if(!strncmp("dir", line, strlen("dir"))) {
-            ndirs++;
-            char *name = strtok(line, delims);
-            name = strtok(NULL, delims);
-            FileSystemNode *node = new_node(cwd, name, 0, true);
-            //print_node(node);
+        } else if(!strncmp("dir", buf, strlen("dir"))) {
+            char *tok = strtok(buf, delim);
+            tok = strtok(NULL, delim);
+            new_node(cwd, tok, 0);
         } else {
-            char *tok = strtok(line, delims);
+            char *tok = strtok(buf, delim);
             unsigned long size = strtoul(tok, NULL, 10);
-            tok = strtok(NULL, delims);
-            FileSystemNode *node = new_node(cwd, tok, size, false);
-            //print_node(node);
+            tok = strtok(NULL, delim);
+            new_node(cwd, tok, size);
+            if(!size) {
+                fprintf(stderr, "WARN: Regular file %s has size 0!\n", tok);
+            }
         }
     }
-
-    FileSystemNode *root = cwd;
-    while(root->parent)
-        root = root->parent;
-
-    unsigned long sz;
-    dirsize(root, &sz);
-    printf("%lu\n", sz);
     fclose(fp);
+
+    mustbefreed = TOTALSPACE - dirsize(root);
+    printf("Sum of all directory sizes under 100000: %lu\n", dirsizesum);
+    dirsize(root); // second pass
+    printf("Size of the directory to be freed: %lu\n", smallesttofree);
+
 }
