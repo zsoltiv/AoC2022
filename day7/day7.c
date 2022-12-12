@@ -80,8 +80,10 @@ unsigned long dirsize(Node *dir)
 
     if(size <= 100000)
         dirsizesum += size;
-    else if(size >= UPDATESIZE && size < smallesttofree)
+    else if(size >= UPDATESIZE - mustbefreed && size < smallesttofree) {
+        printf("Potential good answer %lu\n", size);
         smallesttofree = size;
+    }
     return size;
 }
 
@@ -124,5 +126,4 @@ int main(void)
     printf("Sum of all directory sizes under 100000: %lu\n", dirsizesum);
     dirsize(root); // second pass
     printf("Size of the directory to be freed: %lu\n", smallesttofree);
-
 }
